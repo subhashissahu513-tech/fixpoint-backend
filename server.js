@@ -10,20 +10,66 @@ app.use(cors());
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 
-const UPLOADS_DIR = path.join(__dirname, 'public', 'uploads');
-if (!fs.existsSync(UPLOADS_DIR)) {
-  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+const IS_VERCEL = !!(process.env.VERCEL || process.env.VERCEL_ENV);
+const DATA_DIR = IS_VERCEL ? path.join('/tmp', 'data') : path.join(__dirname, 'data');
+const UPLOADS_DIR = IS_VERCEL ? path.join('/tmp', 'uploads') : path.join(__dirname, 'public', 'uploads');
+
+try {
+  if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+} catch (e) {
+  console.warn('Notice: UPLOADS_DIR warning:', e.message);
 }
+
+try {
+  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+} catch (e) {
+  console.warn('Notice: DATA_DIR warning:', e.message);
+}
+
 app.use('/uploads', express.static(UPLOADS_DIR));
 
-// Image Upload Endpoint (supports Base64 / Data URL / Cloudinary pass-through)
-app.post('/api/upload', (req, res) => {
+// Image Upload Endpoint (supports Cloudinary direct upload & Base64 storage)
+app.post('/api/upload', async (req, res) => {
   try {
     const { imageBase64, filename } = req.body;
     if (!imageBase64) {
       return res.status(400).json({ success: false, message: 'No image data provided' });
     }
 
+    // 1. Direct Cloudinary REST API upload if Cloudinary environment variables are set
+    const cCloud = process.env.CLOUDINARY_CLOUD_NAME;
+    const cKey = process.env.CLOUDINARY_API_KEY;
+    const cSecret = process.env.CLOUDINARY_API_SECRET;
+
+    if (cCloud && cKey && cSecret) {
+      try {
+        const timestamp = Math.round(new Date().getTime() / 1000);
+        const crypto = require('crypto');
+        const strToSign = `folder=fixpoint_services&timestamp=${timestamp}${cSecret}`;
+        const signature = crypto.createHash('sha1').update(strToSign).digest('hex');
+
+        const formData = new URLSearchParams();
+        formData.append('file', imageBase64);
+        formData.append('api_key', cKey);
+        formData.append('timestamp', String(timestamp));
+        formData.append('signature', signature);
+        formData.append('folder', 'fixpoint_services');
+
+        const cRes = await fetch(`https://api.cloudinary.com/v1_1/${cCloud}/image/upload`, {
+          method: 'POST',
+          body: formData
+        });
+        const cJson = await cRes.json();
+        if (cJson.secure_url) {
+          console.log('[Upload] Direct Cloudinary Upload Success:', cJson.secure_url);
+          return res.json({ success: true, url: cJson.secure_url, cloudinaryId: cJson.public_id });
+        }
+      } catch (cErr) {
+        console.warn('[Upload] Cloudinary upload error:', cErr.message);
+      }
+    }
+
+    // 2. Storage fallback
     const matches = imageBase64.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
     const ext = matches ? (matches[1].split('/')[1] || 'jpg') : 'jpg';
     const base64Data = matches ? matches[2] : imageBase64;
@@ -31,14 +77,16 @@ app.post('/api/upload', (req, res) => {
     const fname = filename ? filename.replace(/[^a-zA-Z0-9.-]/g, '_') : `service-${Date.now()}-${Math.floor(Math.random() * 1000)}.${cleanExt}`;
     const filePath = path.join(UPLOADS_DIR, fname);
 
-    fs.writeFileSync(filePath, Buffer.from(base64Data, 'base64'));
-
-    const host = req.get('host') || 'fixpoint-backend.vercel.app';
-    const protocol = req.protocol === 'https' || host.includes('vercel.app') ? 'https' : 'http';
-    const fileUrl = `${protocol}://${host}/uploads/${fname}`;
-
-    console.log('[Upload] Saved image to:', fileUrl);
-    return res.json({ success: true, url: fileUrl, filename: fname });
+    try {
+      fs.writeFileSync(filePath, Buffer.from(base64Data, 'base64'));
+      const host = req.get('host') || 'fixpoint-backend.vercel.app';
+      const protocol = req.protocol === 'https' || host.includes('vercel.app') ? 'https' : 'http';
+      const fileUrl = `${protocol}://${host}/uploads/${fname}`;
+      console.log('[Upload] Saved image to:', fileUrl);
+      return res.json({ success: true, url: fileUrl, filename: fname });
+    } catch (fsErr) {
+      return res.json({ success: true, url: imageBase64, filename: fname });
+    }
   } catch (err) {
     console.error('[Upload Error]', err);
     return res.status(500).json({ success: false, message: 'Upload failed: ' + err.message });
@@ -73,10 +121,6 @@ app.all('/api/admin/reset-data', (req, res) => {
   res.json({ success: true, message: 'All stale bookings and technicians have been wiped clean.' });
 });
 
-const DATA_DIR = path.join(__dirname, 'data');
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-}
 
 // ─── Initial Catalog Data (All amounts stored in integer paise) ───────────────
 // ─── Initial Catalog Data (All amounts stored in integer paise) ───────────────
@@ -1061,6 +1105,10 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`⚡ FixPoint Central Sync Server running on port ${PORT}`);
-});
+if (!process.env.VERCEL) {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`⚡ FixPoint Central Sync Server running on port ${PORT}`);
+  });
+}
+
+module.exports = app;
