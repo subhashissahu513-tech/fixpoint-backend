@@ -7,17 +7,53 @@ const app = express();
 const PORT = process.env.PORT || 5001;
 
 app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '25mb' }));
+app.use(express.urlencoded({ extended: true, limit: '25mb' }));
+
+const UPLOADS_DIR = path.join(__dirname, 'public', 'uploads');
+if (!fs.existsSync(UPLOADS_DIR)) {
+  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
+app.use('/uploads', express.static(UPLOADS_DIR));
+
+// Image Upload Endpoint (supports Base64 / Data URL / Cloudinary pass-through)
+app.post('/api/upload', (req, res) => {
+  try {
+    const { imageBase64, filename } = req.body;
+    if (!imageBase64) {
+      return res.status(400).json({ success: false, message: 'No image data provided' });
+    }
+
+    const matches = imageBase64.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+    const ext = matches ? (matches[1].split('/')[1] || 'jpg') : 'jpg';
+    const base64Data = matches ? matches[2] : imageBase64;
+    const cleanExt = ext === 'jpeg' ? 'jpg' : ext;
+    const fname = filename ? filename.replace(/[^a-zA-Z0-9.-]/g, '_') : `service-${Date.now()}-${Math.floor(Math.random() * 1000)}.${cleanExt}`;
+    const filePath = path.join(UPLOADS_DIR, fname);
+
+    fs.writeFileSync(filePath, Buffer.from(base64Data, 'base64'));
+
+    const host = req.get('host') || 'fixpoint-backend.vercel.app';
+    const protocol = req.protocol === 'https' || host.includes('vercel.app') ? 'https' : 'http';
+    const fileUrl = `${protocol}://${host}/uploads/${fname}`;
+
+    console.log('[Upload] Saved image to:', fileUrl);
+    return res.json({ success: true, url: fileUrl, filename: fname });
+  } catch (err) {
+    console.error('[Upload Error]', err);
+    return res.status(500).json({ success: false, message: 'Upload failed: ' + err.message });
+  }
+});
 
 app.get('/', (req, res) => {
   res.json({
     status: 'online',
     service: 'FixPoint Backend API',
-    version: '1.1.0',
+    version: '1.2.0',
     endpoints: [
       '/api/health',
       '/api/catalog',
+      '/api/upload',
       '/api/technicians',
       '/api/bookings',
       '/api/events'
@@ -43,6 +79,7 @@ if (!fs.existsSync(DATA_DIR)) {
 }
 
 // ─── Initial Catalog Data (All amounts stored in integer paise) ───────────────
+// ─── Initial Catalog Data (All amounts stored in integer paise) ───────────────
 const defaultCatalog = [
   {
     id: 's1',
@@ -51,13 +88,18 @@ const defaultCatalog = [
     description: 'Diagnose humming, slow rotation, blade balancing or capacitor replacement',
     unit: 'per fan',
     defaultPaise: 19900,
+    mrpPaise: 29900,
     minPaise: 14900,
     maxPaise: 29900,
     timeMins: 30,
     warrantyDays: 30,
     requiresPhoto: true,
     isActive: true,
-    sort: 1
+    sort: 1,
+    rating: 4.8,
+    ratingCount: 342,
+    badge: 'Popular',
+    image: 'https://images.unsplash.com/photo-1540569014015-19a7be504e3a?w=400'
   },
   {
     id: 's2',
@@ -66,13 +108,18 @@ const defaultCatalog = [
     description: 'Mounting onto ceiling hook, wiring connections, and safety check',
     unit: 'per fan',
     defaultPaise: 24900,
+    mrpPaise: 39900,
     minPaise: 19900,
     maxPaise: 34900,
     timeMins: 45,
     warrantyDays: 30,
     requiresPhoto: true,
     isActive: true,
-    sort: 2
+    sort: 2,
+    rating: 4.9,
+    ratingCount: 512,
+    badge: 'Bestseller',
+    image: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=400'
   },
   {
     id: 's3',
@@ -81,13 +128,18 @@ const defaultCatalog = [
     description: 'Replacement of loose, burnt or sparking modular switch/socket points',
     unit: 'per set',
     defaultPaise: 14900,
+    mrpPaise: 24900,
     minPaise: 9900,
     maxPaise: 24900,
     timeMins: 25,
     warrantyDays: 30,
     requiresPhoto: true,
     isActive: true,
-    sort: 3
+    sort: 3,
+    rating: 4.7,
+    ratingCount: 420,
+    badge: 'Quick Fix',
+    image: 'https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=400'
   },
   {
     id: 's4',
@@ -96,13 +148,18 @@ const defaultCatalog = [
     description: 'Dedicated high-load socket for AC, Geyser or Microwave with internal wiring',
     unit: 'per point',
     defaultPaise: 29900,
+    mrpPaise: 44900,
     minPaise: 19900,
     maxPaise: 39900,
     timeMins: 35,
     warrantyDays: 60,
     requiresPhoto: true,
     isActive: true,
-    sort: 4
+    sort: 4,
+    rating: 4.8,
+    ratingCount: 198,
+    badge: 'Heavy Load',
+    image: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?w=400'
   },
   {
     id: 's5',
@@ -111,13 +168,18 @@ const defaultCatalog = [
     description: 'Fix frequent tripping, burnt terminal screws or faulty circuit breaker',
     unit: 'per MCB',
     defaultPaise: 29900,
+    mrpPaise: 49900,
     minPaise: 24900,
     maxPaise: 44900,
     timeMins: 30,
     warrantyDays: 90,
     requiresPhoto: true,
     isActive: true,
-    sort: 5
+    sort: 5,
+    rating: 4.9,
+    ratingCount: 280,
+    badge: 'Safety Essential',
+    image: 'https://images.unsplash.com/photo-1581092335397-9583fe92d232?w=400'
   },
   {
     id: 's6',
@@ -126,13 +188,18 @@ const defaultCatalog = [
     description: 'Full phase balancing, busbar tightening, neutral link check & earth leakage test',
     unit: 'per board',
     defaultPaise: 59900,
+    mrpPaise: 89900,
     minPaise: 49900,
     maxPaise: 79900,
     timeMins: 60,
     warrantyDays: 90,
     requiresPhoto: true,
     isActive: true,
-    sort: 6
+    sort: 6,
+    rating: 4.9,
+    ratingCount: 145,
+    badge: 'Comprehensive',
+    image: 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=400'
   },
   {
     id: 's7',
@@ -141,13 +208,18 @@ const defaultCatalog = [
     description: 'Installation of false-ceiling spotlight, panel light or driver swap',
     unit: 'per light',
     defaultPaise: 12900,
+    mrpPaise: 19900,
     minPaise: 9900,
     maxPaise: 19900,
     timeMins: 20,
     warrantyDays: 30,
     requiresPhoto: true,
     isActive: true,
-    sort: 7
+    sort: 7,
+    rating: 4.8,
+    ratingCount: 388,
+    badge: 'Trending',
+    image: 'https://images.unsplash.com/photo-1507473885765-e6ed057f782c?w=400'
   },
   {
     id: 's8',
@@ -156,13 +228,18 @@ const defaultCatalog = [
     description: 'Heavy ceiling anchor fastening, balance leveling and multi-arm wiring',
     unit: 'per unit',
     defaultPaise: 54900,
+    mrpPaise: 79900,
     minPaise: 39900,
     maxPaise: 79900,
     timeMins: 60,
     warrantyDays: 30,
     requiresPhoto: true,
     isActive: true,
-    sort: 8
+    sort: 8,
+    rating: 5.0,
+    ratingCount: 96,
+    badge: 'Premium',
+    image: 'https://images.unsplash.com/photo-1513506003901-1e6a229e2d15?w=400'
   },
   {
     id: 's9',
@@ -171,13 +248,18 @@ const defaultCatalog = [
     description: 'Megger insulation test, continuity tracing and rewiring burnt segment',
     unit: 'per room',
     defaultPaise: 49900,
+    mrpPaise: 69900,
     minPaise: 34900,
     maxPaise: 79900,
     timeMins: 45,
     warrantyDays: 60,
     requiresPhoto: true,
     isActive: true,
-    sort: 9
+    sort: 9,
+    rating: 4.9,
+    ratingCount: 220,
+    badge: 'Emergency',
+    image: 'https://images.unsplash.com/photo-1621905252507-b35492cc74b4?w=400'
   },
   {
     id: 's10',
@@ -186,13 +268,18 @@ const defaultCatalog = [
     description: 'Inverter output line routing, bypass switch connection and battery terminal grease',
     unit: 'per setup',
     defaultPaise: 79900,
+    mrpPaise: 119900,
     minPaise: 59900,
     maxPaise: 119900,
     timeMins: 60,
     warrantyDays: 90,
     requiresPhoto: true,
     isActive: true,
-    sort: 10
+    sort: 10,
+    rating: 4.8,
+    ratingCount: 160,
+    badge: 'Power Backup',
+    image: 'https://images.unsplash.com/photo-1513836279014-a89f7a76ae86?w=400'
   }
 ];
 
