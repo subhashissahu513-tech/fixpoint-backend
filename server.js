@@ -25,6 +25,18 @@ app.get('/', (req, res) => {
   });
 });
 
+// Admin endpoint to instantly wipe all stale test data
+app.all('/api/admin/reset-data', (req, res) => {
+  bookings = [];
+  technicians = [];
+  queueState = { nextQueueNumber: 1 };
+  saveJson(BOOKINGS_FILE, bookings);
+  saveJson(TECHNICIANS_FILE, technicians);
+  saveJson(QUEUE_POINTER_FILE, queueState);
+  console.log('[Admin] ALL DATA WIPED CLEAN.');
+  res.json({ success: true, message: 'All stale bookings and technicians have been wiped clean.' });
+});
+
 const DATA_DIR = path.join(__dirname, 'data');
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
