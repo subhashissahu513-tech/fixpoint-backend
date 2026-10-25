@@ -6,9 +6,30 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 5001;
 
+// Vercel Serverless Path Normalizer (recovers original path if rewritten to /server.js or /api)
+app.use((req, res, next) => {
+  const vPath = req.headers['x-matched-path'] || req.headers['x-forwarded-uri'] || req.headers['x-vercel-matched-path'];
+  if (vPath && vPath !== '/server.js' && vPath !== '/api' && vPath !== '/api/index') {
+    req.url = vPath;
+  } else if (req.url.startsWith('/server.js/')) {
+    req.url = req.url.replace(/^\/server\.js/, '');
+  }
+  next();
+});
+
 app.use(cors());
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));
+
+// Handle direct /server.js ping
+app.all('/server.js', (req, res, next) => {
+  const vPath = req.headers['x-matched-path'] || req.headers['x-forwarded-uri'] || req.headers['x-vercel-matched-path'];
+  if (vPath && vPath !== '/server.js' && vPath !== '/api') {
+    req.url = vPath;
+    return app._router.handle(req, res, next);
+  }
+  res.json({ status: 'ok', service: 'FixPoint Express Serverless', timestamp: new Date().toISOString() });
+});
 
 const IS_VERCEL = !!(process.env.VERCEL || process.env.VERCEL_ENV);
 const DATA_DIR = IS_VERCEL ? path.join('/tmp', 'data') : path.join(__dirname, 'data');
