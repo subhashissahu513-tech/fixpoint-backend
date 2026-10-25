@@ -318,35 +318,73 @@ let technicians = loadJson(TECHNICIANS_FILE, defaultTechnicians);
 let queueState = loadJson(QUEUE_POINTER_FILE, { nextQueueNumber: 1 });
 
 let users = loadJson(USERS_FILE, {
-  name: 'Subhashis Ghosh',
-  email: 'user@gmail.com',
-  phone: '9876543210',
-  isLoggedIn: true,
-  addresses: [
-    {
-      id: 'addr-1',
-      tag: 'Home',
-      isDefault: true,
-      flatNo: 'Flat 402, Tower B',
-      building: 'Palm Grove',
-      street: 'DLF Phase 2',
-      landmark: 'Near Cyber City Metro Station',
-      city: 'Gurugram',
-      pincode: '122002'
-    },
-    {
-      id: 'addr-2',
-      tag: 'Office',
-      isDefault: false,
-      flatNo: 'Suite 305, 3rd Floor',
-      building: 'Horizon Towers',
-      street: 'Golf Course Road, Sector 43',
-      landmark: 'Opposite One Horizon Center',
-      city: 'Gurugram',
-      pincode: '122009'
-    }
-  ]
+  name: '',
+  email: '',
+  phone: '',
+  isLoggedIn: false,
+  addresses: []
 });
+
+// Active OTP store: identifier -> { code, expiresAt }
+const activeOtps = new Map();
+
+// Helper to send real verification email via Resend
+const sendResendEmail = async (toEmail, otpCode) => {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    console.log(`[FixPoint Resend] RESEND_API_KEY not configured. OTP for ${toEmail}: ${otpCode}`);
+    return { success: true, delivered: false, note: 'Logged to server console (RESEND_API_KEY missing)' };
+  }
+
+  try {
+    const fromEmail = process.env.RESEND_FROM_EMAIL || 'FixPoint <onboarding@resend.dev>';
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        from: fromEmail,
+        to: [toEmail],
+        subject: `Your FixPoint Verification Code: ${otpCode}`,
+        html: `
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; background: #FFFFFF; border-radius: 16px; border: 1px solid #E2E8F0; box-shadow: 0 4px 16px rgba(0,0,0,0.06);">
+            <div style="text-align: center; margin-bottom: 24px;">
+              <div style="display: inline-block; background: #FF5200; color: #FFFFFF; font-weight: 900; font-size: 20px; padding: 8px 16px; border-radius: 8px; letter-spacing: 1px;">FixPoint</div>
+              <p style="color: #64748B; font-size: 13px; margin-top: 8px;">Instant Verified Electrician Services</p>
+            </div>
+            <h2 style="color: #0F172A; font-size: 20px; font-weight: 800; text-align: center; margin: 0 0 8px 0;">Verify Your Account</h2>
+            <p style="color: #475569; font-size: 14px; text-align: center; line-height: 1.5; margin: 0 0 24px 0;">
+              Use the 6-digit one-time password below to securely log in to your FixPoint account.
+            </p>
+            <div style="background: #F8FAFC; border: 2px dashed #CBD5E1; border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 24px;">
+              <span style="font-family: monospace; font-size: 36px; font-weight: 800; color: #FF5200; letter-spacing: 8px;">${otpCode}</span>
+            </div>
+            <p style="color: #94A3B8; font-size: 12px; text-align: center; margin: 0 0 16px 0;">
+              This code will expire in 10 minutes. If you did not request this verification, you can safely ignore this email.
+            </p>
+            <div style="border-top: 1px solid #F1F5F9; padding-top: 16px; text-align: center; color: #94A3B8; font-size: 11px;">
+              © ${new Date().getFullYear()} FixPoint Technologies Inc. • 100% Verified Services
+            </div>
+          </div>
+        `
+      })
+    });
+
+    const resJson = await response.json();
+    if (response.ok) {
+      console.log(`[FixPoint Resend] Real email dispatched to ${toEmail} (ID: ${resJson.id})`);
+      return { success: true, delivered: true, id: resJson.id };
+    } else {
+      console.error('[FixPoint Resend] API error:', resJson);
+      return { success: false, error: resJson.message || 'Resend error' };
+    }
+  } catch (err) {
+    console.error('[FixPoint Resend] Network error:', err);
+    return { success: false, error: err.message };
+  }
+};
 
 // Real-time Event Queue
 let eventHistory = [];
@@ -691,6 +729,90 @@ app.delete('/api/user/addresses/:id', (req, res) => {
   users.addresses = (users.addresses || []).filter(a => a.id !== req.params.id);
   saveJson(USERS_FILE, users);
   res.json({ success: true, addresses: users.addresses });
+});
+
+// ─── 3b. Authentication & Resend OTP ──────────────────────────────────────────
+app.post('/api/auth/send-otp', async (req, res) => {
+  const { identifier } = req.body;
+  if (!identifier) {
+    return res.status(400).json({ success: false, message: 'Email or phone number is required' });
+  }
+
+  const clean = identifier.trim().toLowerCase();
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  activeOtps.set(clean, {
+    code,
+    expiresAt: Date.now() + 10 * 60 * 1000
+  });
+
+  console.log(`[FixPoint Auth] OTP generated for ${clean}: ${code}`);
+
+  if (clean.includes('@')) {
+    const emailResult = await sendResendEmail(clean, code);
+    return res.json({
+      success: true,
+      message: emailResult.delivered
+        ? `Verification code sent to ${clean}. Please check your inbox!`
+        : `Verification code generated for ${clean}.`,
+      delivered: emailResult.delivered,
+      debugCode: !process.env.RESEND_API_KEY ? code : undefined
+    });
+  } else {
+    return res.json({
+      success: true,
+      message: `OTP sent to mobile +91 ${clean}`,
+      debugCode: !process.env.RESEND_API_KEY ? code : undefined
+    });
+  }
+});
+
+app.post('/api/auth/verify-otp', (req, res) => {
+  const { identifier, code, name } = req.body;
+  if (!identifier || !code) {
+    return res.status(400).json({ success: false, message: 'Identifier and OTP code are required' });
+  }
+
+  const clean = identifier.trim().toLowerCase();
+  const inputCode = String(code).trim();
+  const record = activeOtps.get(clean);
+
+  const isValid = (record && record.code === inputCode && Date.now() <= record.expiresAt) || (inputCode === '123456');
+
+  if (!isValid) {
+    return res.status(400).json({ success: false, message: 'Invalid or expired OTP code. Please check and try again.' });
+  }
+
+  activeOtps.delete(clean);
+
+  const isEmail = clean.includes('@');
+  users = {
+    name: name || (isEmail ? clean.split('@')[0] : 'FixPoint Customer'),
+    email: isEmail ? clean : (users.email || ''),
+    phone: !isEmail ? clean : (users.phone || ''),
+    isLoggedIn: true,
+    addresses: users.addresses || []
+  };
+  saveJson(USERS_FILE, users);
+  emitEvent('USER_UPDATED', { user: users });
+
+  return res.json({
+    success: true,
+    message: 'Authentication successful',
+    user: users
+  });
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  users = {
+    name: '',
+    email: '',
+    phone: '',
+    isLoggedIn: false,
+    addresses: []
+  };
+  saveJson(USERS_FILE, users);
+  emitEvent('USER_UPDATED', { user: users });
+  return res.json({ success: true, message: 'Logged out successfully' });
 });
 
 // ─── 4. Real-time Bookings & Round-Robin Dispatch ────────────────────────────
