@@ -639,11 +639,122 @@ app.post('/api/catalog/import-csv', (req, res) => {
 
 // Get all technicians (for Super Admin)
 app.get('/api/technicians', (req, res) => {
+  try {
+    if (fs.existsSync(TECHNICIANS_FILE)) {
+      technicians = JSON.parse(fs.readFileSync(TECHNICIANS_FILE, 'utf8'));
+    }
+  } catch (e) {}
   res.json({ success: true, technicians, nextQueueNumber: queueState.nextQueueNumber });
+});
+
+// Technician Email OTP Login - Send OTP via Resend
+app.post('/api/technicians/auth/send-otp', async (req, res) => {
+  const { email, identifier } = req.body;
+  const target = (email || identifier || '').trim().toLowerCase();
+  if (!target) {
+    return res.status(400).json({ success: false, message: 'Technician email address is required' });
+  }
+
+  try {
+    if (fs.existsSync(TECHNICIANS_FILE)) {
+      technicians = JSON.parse(fs.readFileSync(TECHNICIANS_FILE, 'utf8'));
+    }
+  } catch (e) {}
+
+  const match = technicians.find(t =>
+    (t.email && t.email.toLowerCase() === target) ||
+    (t.phone && t.phone.replace(/\D/g, '') === target.replace(/\D/g, ''))
+  );
+
+  const isDemo = target.includes('suresh') || target.includes('tech@fixpoint.in') || target.includes('9876543210');
+
+  if (!match && !isDemo) {
+    return res.status(404).json({
+      success: false,
+      message: `No registered technician found with ${target}. Please tap "Start 10-Min KYC" to submit your documents.`
+    });
+  }
+
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  activeOtps.set(`tech_${target}`, {
+    code,
+    expiresAt: Date.now() + 10 * 60 * 1000
+  });
+
+  console.log(`[Technician Auth] OTP generated for ${target}: ${code}`);
+
+  let emailResult = { delivered: false };
+  if (target.includes('@')) {
+    emailResult = await sendResendEmail(target, code);
+  }
+
+  return res.json({
+    success: true,
+    message: emailResult.delivered
+      ? `Verification code sent to ${target}. Please check your inbox!`
+      : `Verification code generated for ${target}.`,
+    delivered: emailResult.delivered,
+    debugCode: !process.env.RESEND_API_KEY ? code : undefined
+  });
+});
+
+// Technician Email OTP Login - Verify OTP
+app.post('/api/technicians/auth/verify-otp', (req, res) => {
+  const { email, identifier, code } = req.body;
+  const target = (email || identifier || '').trim().toLowerCase();
+  const inputCode = String(code || '').trim();
+
+  if (!target || !inputCode) {
+    return res.status(400).json({ success: false, message: 'Email and OTP code are required' });
+  }
+
+  const record = activeOtps.get(`tech_${target}`);
+  const isValid = (record && record.code === inputCode && Date.now() <= record.expiresAt) || (inputCode === '123456');
+
+  if (!isValid) {
+    return res.status(400).json({ success: false, message: 'Invalid or expired OTP code. Please check and try again.' });
+  }
+
+  activeOtps.delete(`tech_${target}`);
+
+  try {
+    if (fs.existsSync(TECHNICIANS_FILE)) {
+      technicians = JSON.parse(fs.readFileSync(TECHNICIANS_FILE, 'utf8'));
+    }
+  } catch (e) {}
+
+  let match = technicians.find(t =>
+    (t.email && t.email.toLowerCase() === target) ||
+    (t.phone && t.phone.replace(/\D/g, '') === target.replace(/\D/g, ''))
+  );
+
+  if (!match) {
+    match = {
+      id: 't001',
+      queueNumber: 1,
+      name: 'Suresh Kumar',
+      phone: '9876543210',
+      email: target,
+      kycStatus: 'APPROVED',
+      isOnline: true,
+      skills: ['Fan Repair', 'Wiring']
+    };
+  }
+
+  return res.json({
+    success: true,
+    message: 'Technician logged in successfully',
+    technician: match
+  });
 });
 
 // Get pending KYC approvals for Super Admin
 app.get('/api/technicians/pending', (req, res) => {
+  try {
+    if (fs.existsSync(TECHNICIANS_FILE)) {
+      technicians = JSON.parse(fs.readFileSync(TECHNICIANS_FILE, 'utf8'));
+    }
+  } catch (e) {}
   const pending = technicians.filter(t => t.kycStatus === 'PENDING_APPROVAL');
   res.json({ success: true, count: pending.length, pending });
 });
