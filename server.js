@@ -10,6 +10,21 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+app.get('/', (req, res) => {
+  res.json({
+    status: 'online',
+    service: 'FixPoint Backend API',
+    version: '1.1.0',
+    endpoints: [
+      '/api/health',
+      '/api/catalog',
+      '/api/technicians',
+      '/api/bookings',
+      '/api/events'
+    ]
+  });
+});
+
 const DATA_DIR = path.join(__dirname, 'data');
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
