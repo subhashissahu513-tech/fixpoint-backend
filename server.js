@@ -185,92 +185,7 @@ const defaultCatalog = [
 ];
 
 // ─── Initial Technicians with Queue Numbering & KYC ──────────────────────────
-const defaultTechnicians = [
-  {
-    id: 't001',
-    queueNumber: 1,
-    name: 'Suresh Kumar',
-    phone: '9876543210',
-    email: 'suresh.kumar@gmail.com',
-    skills: ['Fan Repair', 'Wiring', 'Switch & Socket'],
-    area: 'DLF Phase 1-4, Gurugram',
-    vehicleNumber: 'HR 26 DQ 8820',
-    aadhaarNumber: 'XXXX-XXXX-8921',
-    panNumber: 'ABCDE1234F',
-    kycStatus: 'APPROVED',
-    isOnline: true,
-    isOnLeave: false,
-    jobsCompleted: 156,
-    rating: 4.8,
-    totalBillingsPaise: 12450000,
-    platformProfitPaise: 1867500, // 15% platform profit
-    technicianPayoutPaise: 10582500, // 85% + materials
-    joinedAt: '2025-03-15'
-  },
-  {
-    id: 't002',
-    queueNumber: 2,
-    name: 'Ramesh Singh',
-    phone: '9123456780',
-    email: 'ramesh.singh@gmail.com',
-    skills: ['MCB & Fuse', 'Switchboard', 'Lighting'],
-    area: 'Sector 56, Gurugram',
-    vehicleNumber: 'HR 26 BB 1204',
-    aadhaarNumber: 'XXXX-XXXX-6612',
-    panNumber: 'BCDEF2345G',
-    kycStatus: 'APPROVED',
-    isOnline: false,
-    isOnLeave: true, // Currently on leave -> auto-redirects to next
-    jobsCompleted: 102,
-    rating: 4.5,
-    totalBillingsPaise: 8160000,
-    platformProfitPaise: 1224000,
-    technicianPayoutPaise: 6936000,
-    joinedAt: '2025-05-20'
-  },
-  {
-    id: 't003',
-    queueNumber: 3,
-    name: 'Vijay Yadav',
-    phone: '9988776655',
-    email: 'vijay.yadav@gmail.com',
-    skills: ['Geyser', 'Earthing', 'DB Overhaul'],
-    area: 'Sector 14-30, Gurugram',
-    vehicleNumber: 'HR 26 CC 9931',
-    aadhaarNumber: 'XXXX-XXXX-3349',
-    panNumber: 'CDEFG3456H',
-    kycStatus: 'APPROVED',
-    isOnline: true,
-    isOnLeave: false,
-    jobsCompleted: 78,
-    rating: 4.7,
-    totalBillingsPaise: 6240000,
-    platformProfitPaise: 936000,
-    technicianPayoutPaise: 5304000,
-    joinedAt: '2025-07-10'
-  },
-  {
-    id: 't004',
-    queueNumber: null,
-    name: 'Manoj Thakur',
-    phone: '8765432109',
-    email: 'manoj.thakur@gmail.com',
-    skills: ['General Electrician', 'Fan Installation'],
-    area: 'MG Road, Gurugram',
-    vehicleNumber: 'HR 26 AA 5512',
-    aadhaarNumber: 'XXXX-XXXX-7721',
-    panNumber: 'DEFGHI4567J',
-    kycStatus: 'PENDING_APPROVAL', // Waiting for Super Admin approval
-    isOnline: false,
-    isOnLeave: false,
-    jobsCompleted: 0,
-    rating: 0,
-    totalBillingsPaise: 0,
-    platformProfitPaise: 0,
-    technicianPayoutPaise: 0,
-    joinedAt: '2026-10-24'
-  }
-];
+const defaultTechnicians = [];
 
 // ─── File Storage Helpers ───────────────────────────────────────────────────
 const CATALOG_FILE = path.join(DATA_DIR, 'catalog.json');
@@ -727,18 +642,18 @@ app.post('/api/bookings', (req, res) => {
     startOtp,
     assignedTechnicianId: assignedTech ? assignedTech.id : null,
     assignedQueueNumber: assignedTech ? assignedTech.queueNumber : null,
-    technician: {
-      id: assignedTech?.id || 't001',
-      queueNumber: assignedTech?.queueNumber || 1,
+    technician: assignedTech ? {
+      id: assignedTech.id,
+      queueNumber: assignedTech.queueNumber,
       assigned: true,
-      name: assignedTech?.name || 'Suresh Kumar',
-      phone: assignedTech?.phone || '9876543210',
+      name: assignedTech.name,
+      phone: assignedTech.phone,
       avatar: 'https://images.unsplash.com/photo-1540569014015-19a7be504e3a?w=150',
-      rating: assignedTech?.rating || 4.8,
-      jobsCompleted: assignedTech?.jobsCompleted || 156,
-      vehicle: assignedTech?.vehicleNumber || 'HR 26 DQ 8820',
+      rating: assignedTech.rating || 5.0,
+      jobsCompleted: assignedTech.jobsCompleted || 0,
+      vehicle: assignedTech.vehicleNumber || 'Unassigned',
       etaMins: 15
-    },
+    } : null,
     quoteItems: [],
     finalTotalPaise: visitFeePaise || 9900,
     timeline: [{ step: 'CONFIRMED', time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), done: true }],
