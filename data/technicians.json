@@ -1,1 +1,54 @@
-[]
+[
+  {
+    "id": "tech_1",
+    "queueNumber": 1,
+    "name": "Ramesh",
+    "phone": "7377897307",
+    "email": "ramesh@fixpoint.in",
+    "area": "DLF Phase 1-4, Gurugram",
+    "vehicleNumber": "Vehicle: Pending",
+    "aadhaarNumber": "XXXX-XXXX-9012",
+    "panNumber": "ABCDE1234F",
+    "isAvailable": true,
+    "onLeave": false,
+    "kycStatus": "APPROVED",
+    "jobsCompleted": 0,
+    "totalEarnings": 0,
+    "rating": 4.9,
+    "registrationDate": "2026-10-24T00:00:00.000Z",
+    "approvedAt": "2026-10-24T00:00:00.000Z",
+    "bankAccount": {
+      "accountHolder": "Ramesh",
+      "bankName": "State Bank of India",
+      "accountMasked": "•••• 4892",
+      "ifsc": "SBIN0001234"
+    },
+    "skills": ["Fan & Light Repair", "Switch & Socket Installation", "Wiring & MCB Repair"]
+  },
+  {
+    "id": "tech_2",
+    "queueNumber": 2,
+    "name": "Ramesh",
+    "phone": "7978485536",
+    "email": "subhashissahu213@gmail.com",
+    "area": "Jeypor3",
+    "vehicleNumber": "Od10u2466",
+    "aadhaarNumber": "XXXX-XXXX-3625",
+    "panNumber": "NLPPS4318G",
+    "isAvailable": true,
+    "onLeave": false,
+    "kycStatus": "APPROVED",
+    "jobsCompleted": 0,
+    "totalEarnings": 0,
+    "rating": 5.0,
+    "registrationDate": "2026-10-24T00:00:00.000Z",
+    "approvedAt": "2026-10-24T00:00:00.000Z",
+    "bankAccount": {
+      "accountHolder": "Ramesh",
+      "bankName": "State Bank of India",
+      "accountMasked": "•••• 4892",
+      "ifsc": "SBIN0001234"
+    },
+    "skills": ["Fan & Light Repair", "Switch & Socket Installation", "Appliance Diagnosis"]
+  }
+]

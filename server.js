@@ -363,6 +363,15 @@ const loadJson = (file, fallback) => {
     if (fs.existsSync(file)) {
       return JSON.parse(fs.readFileSync(file, 'utf8'));
     }
+    // If running on Vercel and /tmp file doesn't exist yet, seed from project root data/
+    const seedFile = path.join(__dirname, 'data', path.basename(file));
+    if (fs.existsSync(seedFile)) {
+      const data = JSON.parse(fs.readFileSync(seedFile, 'utf8'));
+      try {
+        fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf8');
+      } catch (_) {}
+      return data;
+    }
   } catch (err) {
     console.error(`Error loading ${file}:`, err);
   }
